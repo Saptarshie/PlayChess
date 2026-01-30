@@ -27,12 +27,12 @@ export default function Navbar() {
               className="group flex items-center gap-2 text-xl font-bold tracking-tighter text-white"
             >
               <div className="h-8 w-8 rounded-lg bg-blue-500 transition-transform group-hover:rotate-12">
-                <Image
+                {/* <Image
                   src="/images/icon.png"
                   alt="Logo"
                   fill
                   className="object-contain drop-shadow-2xl rounded-full"
-                />
+                /> */}
               </div>
               PlayChess
             </Link>
@@ -57,9 +57,12 @@ export default function Navbar() {
                 </Link>
               );
             })}
-            <button className="flex h-10 items-center justify-center rounded-full bg-blue-600 px-6 text-sm font-semibold text-white transition-all hover:bg-blue-500 hover:shadow-lg hover:shadow-blue-500/25">
+            <Link
+              href="/auth/sign-in"
+              className="flex h-10 items-center justify-center rounded-full bg-blue-600 px-6 text-sm font-semibold text-white transition-all hover:bg-blue-500 hover:shadow-lg hover:shadow-blue-500/25"
+            >
               Sign In
-            </button>
+            </Link>
           </div>
 
           {/* mobile menu button */}

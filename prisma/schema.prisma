@@ -1,0 +1,49 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mongodb"
+  url      = env("MONGODB_URI")
+}
+
+model User {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  username  String   @unique
+  email     String   @unique
+  password  String?
+  rating    Int      @default(1200)
+  gamesAsWhite Game[] @relation("white_games")
+  gamesAsBlack Game[] @relation("black_games")
+  createdAt DateTime @default(now())
+}
+
+model Game {
+  id         String   @id @default(auto()) @map("_id") @db.ObjectId
+  uuid       String   @unique
+  whiteId    String   @db.ObjectId
+  blackId    String   @db.ObjectId
+  white      User     @relation("white_games", fields: [whiteId], references: [id])
+  black      User     @relation("black_games", fields: [blackId], references: [id])
+  moves      Move[]
+  result     String?   // "1-0", "0-1", "1/2-1/2", "abandoned"
+  createdAt  DateTime @default(now())
+  endedAt    DateTime?
+  initialFen String   @default("startpos")
+  timeControl String  // e.g. "5+0", "3+2"
+  status     String   // "waiting", "ongoing", "finished"
+}
+
+model Move {
+  id        String   @id @default(auto()) @map("_id") @db.ObjectId
+  gameId    String   @db.ObjectId
+  san       String  // SAN or UCI
+  from      String
+  to        String
+  fen       String  // fen after move
+  ply       Int
+  byWhite   Boolean
+  createdAt DateTime @default(now())
+  game      Game     @relation(fields: [gameId], references:[id])
+}
+
