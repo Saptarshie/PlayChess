@@ -1,6 +1,9 @@
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import Navbar from "./components/navbar";
+import StoreProvider from "./StoreProvider";
+import { validateUser } from "./actions/auth-actions";
+
 // const geistSans = Geist({
 //   variable: "--font-geist-sans",
 //   subsets: ["latin"],
@@ -16,12 +19,16 @@ export const metadata = {
   description: "An app built for playing chess online",
 };
 
-export default function RootLayout({ children }) {
+export default async function RootLayout({ children }) {
+  const user = await validateUser();
+
   return (
     <html lang="en">
       <body>
-        <Navbar />
-        <main className="min-h-screen">{children}</main>
+        <StoreProvider user={user}>
+          <Navbar />
+          <main className="min-h-screen">{children}</main>
+        </StoreProvider>
       </body>
     </html>
   );

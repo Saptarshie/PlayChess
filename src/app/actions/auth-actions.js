@@ -74,18 +74,19 @@ export async function signIn(prevState, formData) {
     const user = await prisma.user.findUnique({
       where: { email },
     });
+    // console.log(user);
 
     if (!user || !user.password) {
       return { error: "Invalid email or password" };
     }
+    // Verify password
+    const passwordMatch = await bcrypt.compare(password, user.password);
 
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-
-    if (!isPasswordValid) {
-      return { error: "Invalid email or password" };
+    if (!passwordMatch) {
+      return { error: "Invalid email or password." };
     }
 
-    // Create session token
+    // Create JWT
     const token = await new SignJWT({
       userId: user.id,
       email: user.email,
@@ -106,24 +107,42 @@ export async function signIn(prevState, formData) {
       path: "/",
     });
 
-    return { success: "Signed in successfully! Redirecting..." };
-  } catch (err) {
-    console.error("Sign in error:", err);
-    return { error: "Internal server error. Please try again." };
+    // Return user data for client-side state update
+    return {
+      success: "Signed in successfully!",
+      user: {
+        id: user.id,
+        email: user.email,
+        username: user.username,
+      },
+    };
+  } catch (error) {
+    console.error("Sign in error:", error);
+    return { error: "Something went wrong." };
   }
+}
+
+export async function logoutAction() {
+  const cookieStore = await cookies();
+  cookieStore.delete("session");
+  return { success: true };
 }
 
 export async function validateUser() {
   const cookieStore = await cookies();
   const token = cookieStore.get("session")?.value;
+  // console.log(token);
 
-  if (!token) return false;
+  if (!token) {
+    console.log("No token found");
+    return null;
+  }
 
   try {
     const { payload } = await jwtVerify(token, secret);
-    return payload;
-  } catch (err) {
-    console.error("Token verification failed:", err);
-    return false;
+    return payload; // { userId, email, username, iat, exp }
+  } catch (error) {
+    console.error("Token verification failed:", error);
+    return null;
   }
 }

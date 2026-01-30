@@ -5,6 +5,9 @@ import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import Image from "next/image";
+import { useSelector, useDispatch } from "react-redux";
+import { selectCurrentUser, logout } from "@/store/features/auth/authSlice";
+import { logoutAction } from "@/app/actions/auth-actions"; // We need to create this
 
 const navItems = [
   { href: "/", label: "Home" },
@@ -16,6 +19,15 @@ const navItems = [
 export default function Navbar() {
   const pathname = usePathname();
   const [open, setOpen] = useState(false);
+  const user = useSelector(selectCurrentUser);
+  const dispatch = useDispatch();
+
+  const handleLogout = async () => {
+    // await logoutAction(); // TODO: Implement server action
+    document.cookie =
+      "session=; Path=/; Expires=Thu, 01 Jan 1970 00:00:01 GMT;"; // Temporary client-side cookie clear
+    dispatch(logout());
+  };
 
   return (
     <nav className="sticky top-0 z-50 border-b border-white/5 bg-[#09090b]/80 backdrop-blur-md">
@@ -57,12 +69,30 @@ export default function Navbar() {
                 </Link>
               );
             })}
-            <Link
-              href="/auth/sign-in"
-              className="flex h-10 items-center justify-center rounded-full bg-blue-600 px-6 text-sm font-semibold text-white transition-all hover:bg-blue-500 hover:shadow-lg hover:shadow-blue-500/25"
-            >
-              Sign In
-            </Link>
+
+            {user ? (
+              <div className="flex items-center gap-4">
+                <span className="text-sm font-medium text-gray-300">
+                  Hi,{" "}
+                  <span className="text-white">
+                    {user.username || user.email}
+                  </span>
+                </span>
+                <button
+                  onClick={handleLogout}
+                  className="flex h-10 items-center justify-center rounded-full bg-red-600/10 px-6 text-sm font-semibold text-red-500 transition-all hover:bg-red-600 hover:text-white"
+                >
+                  Sign Out
+                </button>
+              </div>
+            ) : (
+              <Link
+                href="/auth/sign-in"
+                className="flex h-10 items-center justify-center rounded-full bg-blue-600 px-6 text-sm font-semibold text-white transition-all hover:bg-blue-500 hover:shadow-lg hover:shadow-blue-500/25"
+              >
+                Sign In
+              </Link>
+            )}
           </div>
 
           {/* mobile menu button */}
@@ -120,6 +150,30 @@ export default function Navbar() {
               </Link>
             );
           })}
+          {user ? (
+            <div className="border-t border-white/5 pt-4 mt-2">
+              <div className="px-4 py-2 text-sm text-gray-400">
+                Signed in as <span className="text-white">{user.username}</span>
+              </div>
+              <button
+                onClick={() => {
+                  handleLogout();
+                  setOpen(false);
+                }}
+                className="w-full text-left block rounded-lg px-4 py-3 text-base font-medium text-red-500 hover:bg-red-500/10 transition-colors"
+              >
+                Sign Out
+              </button>
+            </div>
+          ) : (
+            <Link
+              href="/auth/sign-in"
+              className="block rounded-lg px-4 py-3 text-base font-medium text-white bg-blue-600 hover:bg-blue-500 transition-colors text-center mt-4"
+              onClick={() => setOpen(false)}
+            >
+              Sign In
+            </Link>
+          )}
         </div>
       )}
     </nav>

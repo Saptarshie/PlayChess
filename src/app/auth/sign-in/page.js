@@ -4,12 +4,20 @@ import Link from "next/link";
 import { signIn } from "@/app/actions/auth-actions";
 import { useActionState } from "react";
 import { useRouter } from "next/navigation";
+import { useDispatch } from "react-redux";
+import { setCredentials } from "@/store/features/auth/authSlice";
 
 export default function SignInPage() {
   const router = useRouter();
+  const dispatch = useDispatch();
+
   const handleSignIn = async (prevState, formData) => {
-    await signIn(prevState, formData);
-    router.push("/");
+    const result = await signIn(prevState, formData);
+    if (result?.user) {
+      dispatch(setCredentials({ user: result.user }));
+      router.push("/");
+    }
+    return result;
   };
   const [state, action, isPending] = useActionState(handleSignIn, null); // TODO: handle error state
   return (

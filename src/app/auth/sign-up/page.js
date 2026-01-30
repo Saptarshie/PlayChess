@@ -9,7 +9,7 @@ export default function SignUpPage() {
   const router = useRouter();
   const handleSignUp = async (prevState, formData) => {
     await signUp(prevState, formData);
-    router.push("/");
+    router.push("/auth/sign-in");
   };
   const [state, action, isPending] = useActionState(handleSignUp, null);
 
