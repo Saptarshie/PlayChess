@@ -228,18 +228,9 @@ export default function RenderChessBoard({
   // handler called by react-chessboard whenever a piece is dropped
   function onDropPiece(sourceSquare, targetSquare, piece) {
     console.log("onDropPiece trigered ...");
-
-    // Handle object argument (fix for mismatch)
-    let from = sourceSquare;
-    let to = targetSquare;
-    let p = piece;
-
-    if (typeof sourceSquare === "object" && sourceSquare !== null) {
-      console.log("Detected object argument for onDropPiece");
-      from = sourceSquare.sourceSquare;
-      to = sourceSquare.targetSquare;
-      p = sourceSquare.piece;
-    }
+    // normalize squares
+    const from = sourceSquare;
+    const to = targetSquare;
 
     // If it's not the player's turn, treat this as a premove
     const sideToMove = chessRef.current.turn() === "w" ? "white" : "black";
@@ -247,7 +238,7 @@ export default function RenderChessBoard({
     console.log("onDropPiece", { from, to, isPlayerTurn });
     if (!isPlayerTurn) {
       // store premove and show subtle UI feedback (we stored already in tryMakeMove)
-      setPremove({ from, to, piece: p });
+      setPremove({ from, to, piece });
       return true; // indicate to chessboard that move was accepted visually
     }
 
@@ -308,34 +299,27 @@ export default function RenderChessBoard({
   return (
     <div className="relative w-full" style={{ maxWidth: boardWidth }}>
       <Chessboard
-        options={{
-          id: "MultiplayerChessboard",
-          animationDuration: 200,
-          boardWidth: Math.min(
-            boardWidth,
-            typeof window !== "undefined" ? window.innerWidth - 64 : boardWidth,
-          ),
-          position: fen,
-          onPieceDrop: (sourceSquare, targetSquare, piece) =>
-            onDropPiece(sourceSquare, targetSquare, piece),
-          arePiecesDraggable: true,
-          customBoardStyle: { borderRadius: 8 },
-          onSquareClick: (square) => {
-            console.log("onSquareClick", square);
-            // Optional: Add click-to-move logic here later if DnD fails
-          },
-          onSquareRightClick: () => {
-            console.log("onSquareRightClick traggered...");
-          },
-          onPieceDragBegin: () => {
-            console.log("onPieceDragBegin traggered...");
-          },
-          onPieceDragEnd: () => {
-            console.log("onPieceDragEnd traggered...");
-          },
-          boardOrientation: orientation,
-          customSquareStyles: customSquareStyles,
+        id="MultiplayerChessboard"
+        animationDuration={200}
+        boardWidth={Math.min(
+          boardWidth,
+          typeof window !== "undefined" ? window.innerWidth - 64 : boardWidth,
+        )}
+        position={fen}
+        onPieceDrop={(sourceSquare, targetSquare, piece) =>
+          onDropPiece(sourceSquare, targetSquare, piece)
+        }
+        arePiecesDraggable={true}
+        customBoardStyle={{ borderRadius: 8 }}
+        onSquareClick={(square) => {
+          console.log("onSquareClick", square);
+          // Optional: Add click-to-move logic here later if DnD fails
         }}
+        onSquareRightClick={() => {}}
+        onPieceDragBegin={() => {}}
+        onPieceDragEnd={() => {}}
+        boardOrientation={orientation}
+        customSquareStyles={customSquareStyles}
         // allow premoves by still letting drop return true even when it's not player's turn; we stored premove above
       />
 

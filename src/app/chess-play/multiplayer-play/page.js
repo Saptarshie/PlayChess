@@ -3,7 +3,12 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import RenderChessBoard from "@/app/components/chessboard";
+// import RenderChessBoard from "@/app/components/chessboard";
+import dynamic from "next/dynamic";
+
+const RenderChessBoard = dynamic(() => import("@/app/components/chessboard"), {
+  ssr: false,
+});
 
 export default function MultiplayerPlay() {
   // detect player color from query param: ?color=white or ?color=black
@@ -86,7 +91,11 @@ export default function MultiplayerPlay() {
 
   // Called when the local player makes a move on the board component
   // For this example we expect "uci" or "san" like string, but it's generic.
-  function handleLocalMove(moveStr) {
+  function handleLocalMove(moveData) {
+    // Extract string if object is passed (fix for "Objects not valid as React child" error)
+    const moveStr =
+      typeof moveData === "object" && moveData.san ? moveData.san : moveData;
+
     // push move into moves state
     setMoves((prev) => {
       const copy = [...prev];
@@ -268,6 +277,7 @@ export default function MultiplayerPlay() {
             <RenderChessBoard
               orientation={orientation}
               onMove={(m) => handleLocalMove(m)}
+              boardWidth={"100%"}
             />
           </div>
 

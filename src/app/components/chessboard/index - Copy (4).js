@@ -228,18 +228,9 @@ export default function RenderChessBoard({
   // handler called by react-chessboard whenever a piece is dropped
   function onDropPiece(sourceSquare, targetSquare, piece) {
     console.log("onDropPiece trigered ...");
-
-    // Handle object argument (fix for mismatch)
-    let from = sourceSquare;
-    let to = targetSquare;
-    let p = piece;
-
-    if (typeof sourceSquare === "object" && sourceSquare !== null) {
-      console.log("Detected object argument for onDropPiece");
-      from = sourceSquare.sourceSquare;
-      to = sourceSquare.targetSquare;
-      p = sourceSquare.piece;
-    }
+    // normalize squares
+    const from = sourceSquare;
+    const to = targetSquare;
 
     // If it's not the player's turn, treat this as a premove
     const sideToMove = chessRef.current.turn() === "w" ? "white" : "black";
@@ -247,7 +238,7 @@ export default function RenderChessBoard({
     console.log("onDropPiece", { from, to, isPlayerTurn });
     if (!isPlayerTurn) {
       // store premove and show subtle UI feedback (we stored already in tryMakeMove)
-      setPremove({ from, to, piece: p });
+      setPremove({ from, to, piece });
       return true; // indicate to chessboard that move was accepted visually
     }
 
