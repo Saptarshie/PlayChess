@@ -19,7 +19,9 @@
     "react-dnd": "^16.0.1",
     "react-dnd-html5-backend": "^16.0.1",
     "react-dom": "19.2.3",
-    "react-redux": "^9.2.0"
+    "react-redux": "^9.2.0",
+    "redis": "^5.10.0",
+    "uuid": "^13.0.0"
   },
   "devDependencies": {
     "@prisma/client": "^6.19.2",

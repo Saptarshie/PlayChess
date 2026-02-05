@@ -9,7 +9,7 @@ export default function OptionList() {
       description:
         "Play chess with players from around the world and climb the leaderboards.",
       image: "/images/playOnline.jpg",
-      link: "/chess-play/multiplayer-play",
+      link: "/game-control",
     },
     {
       title: "PLAY WITH FRIEND",
@@ -41,12 +41,12 @@ export default function OptionList() {
     <div className="grid grid-cols-1 gap-6 sm:grid-cols-2 lg:grid-cols-3">
       {options.map((option) => (
         <Link href={option.link || "#"} key={option.title} className="block">
-        <PlayOptionCard
-          key={option.title}
-          title={option.title}
-          description={option.description}
-          image={option.image}
-        />
+          <PlayOptionCard
+            key={option.title}
+            title={option.title}
+            description={option.description}
+            image={option.image}
+          />
         </Link>
       ))}
     </div>

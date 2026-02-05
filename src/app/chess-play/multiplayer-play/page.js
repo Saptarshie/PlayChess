@@ -92,6 +92,7 @@ export default function MultiplayerPlay() {
   // Called when the local player makes a move on the board component
   // For this example we expect "uci" or "san" like string, but it's generic.
   function handleLocalMove(moveData) {
+    console.log("handleLocalMove called ...", moveData);
     // Extract string if object is passed (fix for "Objects not valid as React child" error)
     const moveStr =
       typeof moveData === "object" && moveData.san ? moveData.san : moveData;
