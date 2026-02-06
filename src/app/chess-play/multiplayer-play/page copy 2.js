@@ -36,9 +36,6 @@ export default function MultiplayerPlay() {
   const [moves, setMoves] = useState([]); // { ply, white, black }
   const [halfMove, setHalfMove] = useState(0);
 
-  // New State: Store the latest move received from opponent to pass to the board
-  const [incomingMove, setIncomingMove] = useState(null);
-
   // Timers (in seconds) — default 10:00 each
   const DEFAULT_TIME = 10 * 60;
   const [whiteTime, setWhiteTime] = useState(DEFAULT_TIME);
@@ -52,9 +49,9 @@ export default function MultiplayerPlay() {
   const [statusText, setStatusText] = useState("Initializing...");
   const [isConnected, setIsConnected] = useState(false);
 
-  // -- 3. WebRTC Initialization --
+  // -- 3. WebRTC Initialization (New Logic) --
   useEffect(() => {
-    // If we don't have a gameID or a user, we can't connect.
+    // If we don't have a gameID or a user (and we aren't in a pure local debug mode), we can't connect.
     if (!gameId || !user?.username) {
       setStatusText("Waiting for login or Game ID...");
       return;
@@ -84,6 +81,7 @@ export default function MultiplayerPlay() {
     };
 
     // Initialize connection
+    // White creates offer (isInitiator = true), Black waits (isInitiator = false)
     const isInitiator = playerColor === "white";
 
     console.log(
@@ -100,7 +98,7 @@ export default function MultiplayerPlay() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameId, user, playerColor]);
 
-  // -- 4. Timer Logic --
+  // -- 4. Timer Logic (From old-page.js) --
   useEffect(() => {
     if (!running) return;
 
@@ -150,39 +148,32 @@ export default function MultiplayerPlay() {
   }
 
   // Handle a move received from the opponent via WebRTC
-  function handleRemoteMove(moveData) {
-    const moveStr =
-      typeof moveData === "object" && moveData.san ? moveData.san : moveData;
-
+  function handleRemoteMove(moveStr) {
     setMoves((prev) => {
       const copy = [...prev];
-      const lastMove = copy[copy.length - 1];
-
-      // Logic: If no moves exist, OR the last row is full (has both white & black), start a new row.
-      if (!lastMove || (lastMove.white && lastMove.black)) {
+      if (halfMove % 2 === 0) {
+        // This theoretically shouldn't happen if turns are synced,
+        // but handles the case where we receive White's move
         copy.push({
-          ply: lastMove ? lastMove.ply + 1 : 1,
+          ply: Math.floor(halfMove / 2) + 1,
           white: moveStr,
           black: "",
         });
       } else {
-        // Otherwise, update the existing row (fill in Black's move)
-        lastMove.black = moveStr;
+        // Fill black slot
+        const last = copy[copy.length - 1];
+        if (last) last.black = moveStr;
       }
       return copy;
     });
-
     setHalfMove((h) => h + 1);
     setTurn((t) => (t === "white" ? "black" : "white"));
     setStatusText(`Opponent played ${moveStr}`);
-
-    // 3. Trigger the board update
-    // We pass the raw moveData (containing 'from' and 'to') to the board
-    setIncomingMove(moveData);
   }
 
   // Called when the local player makes a move on the board
   function handleLocalMove(moveData) {
+    // 1. Validate turn
     if (turn !== playerColor) {
       console.warn("Not your turn!");
       return;
@@ -191,19 +182,20 @@ export default function MultiplayerPlay() {
     const moveStr =
       typeof moveData === "object" && moveData.san ? moveData.san : moveData;
 
+    console.log("Local move: ", moveStr);
+
+    // 2. Update local state
     setMoves((prev) => {
       const copy = [...prev];
-      const lastMove = copy[copy.length - 1];
-
-      // Same robust logic as above
-      if (!lastMove || (lastMove.white && lastMove.black)) {
+      if (halfMove % 2 === 0) {
         copy.push({
-          ply: lastMove ? lastMove.ply + 1 : 1,
+          ply: Math.floor(halfMove / 2) + 1,
           white: moveStr,
           black: "",
         });
       } else {
-        lastMove.black = moveStr;
+        const last = copy[copy.length - 1];
+        if (last) last.black = moveStr;
       }
       return copy;
     });
@@ -214,38 +206,48 @@ export default function MultiplayerPlay() {
       `${moveStr} — ${turn === "white" ? "Black" : "White"} to move`,
     );
 
-    // Send via WebRTC
+    // 3. Send via WebRTC
     if (rtcRef.current) {
-      rtcRef.current.sendMove(moveData);
+      rtcRef.current.sendMove(moveStr);
     }
   }
 
+  // Connection toggle (Mock/Manual)
   function toggleConnection() {
     if (isConnected) {
+      // Manual disconnect
       rtcRef.current?.cleanup();
       setIsConnected(false);
       setStatusText("Disconnected by user");
     } else {
+      // Trigger re-init if needed, or just let the user reload for now
+      // since rtc.init is bound to the useEffect mount.
       window.location.reload();
     }
   }
 
+  // UI Action Helpers
   function handleOfferDraw() {
     setStatusText("Draw offered — waiting for opponent");
+    // TODO: Add rtcRef.current.sendMessage({type: 'DRAW_OFFER'})
   }
 
   function handleResign() {
     setStatusText(`${playerColor === turn ? "You" : "Opponent"} resigned`);
     setRunning(false);
+    // TODO: Add rtcRef.current.sendMessage({type: 'RESIGN'})
   }
 
   function handleUndo() {
+    // Naive local undo
     setMoves((prev) => {
       const copy = [...prev];
       if (copy.length === 0) return copy;
       if (halfMove % 2 === 1) {
+        // last move was white => remove that object
         copy.pop();
       } else {
+        // last move was black => clear black property
         const last = copy[copy.length - 1];
         if (last) last.black = "";
       }
@@ -260,6 +262,7 @@ export default function MultiplayerPlay() {
     setOrientation((o) => (o === "white" ? "black" : "white"));
   }
 
+  // Render move history
   function renderMoveRows() {
     return moves.map((m) => (
       <div
@@ -373,14 +376,9 @@ export default function MultiplayerPlay() {
 
           {/* Board Container */}
           <div className="w-full aspect-square shadow-2xl shadow-black/50 rounded-sm overflow-hidden border-4 border-zinc-800 bg-zinc-900">
-            {/* Update: Added 'nextmove' prop. 
-                This passes the incoming move object to RenderChessBoard, 
-                allowing it to update the visual board state. 
-            */}
             <RenderChessBoard
               orientation={orientation}
               onMove={(m) => handleLocalMove(m)}
-              nextmove={incomingMove}
               boardWidth={"100%"}
             />
           </div>
