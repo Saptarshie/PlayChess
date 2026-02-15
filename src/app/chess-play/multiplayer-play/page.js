@@ -16,6 +16,7 @@ import {
   resetGame,
 } from "@/store/features/game/gameSlice";
 import { WebRTCManager } from "@/lib/web-rtc-helper";
+import { persistGameState, clearPersistedGame } from "@/app/StoreProvider";
 
 // Dynamic import for the Chessboard to avoid SSR issues
 const RenderChessBoard = dynamic(() => import("@/app/components/chessboard"), {
@@ -76,6 +77,10 @@ export default function MultiplayerPlay() {
       return;
     }
 
+    // Check if we're reconnecting (game state exists in Redux)
+    const isReconnecting =
+      gameState.status === "playing" && gameState.gameId === gameId;
+
     if (!rtcRef.current) {
       rtcRef.current = new WebRTCManager();
     }
@@ -85,7 +90,10 @@ export default function MultiplayerPlay() {
     // Setup callbacks
     rtc.onConnect = () => {
       setIsConnected(true);
-      setStatusText("Connected to opponent");
+      setStatusText(
+        isReconnecting ? "Reconnected to opponent" : "Connected to opponent",
+      );
+      dispatch(setConnected());
     };
 
     rtc.onDisconnect = () => {
@@ -105,7 +113,6 @@ export default function MultiplayerPlay() {
 
     rtc.onReconnectFailed = () => {
       setStatusText("Connection lost - game abandoned");
-      // Handle game abandonment
       handleGameEnd("abandonment", playerColor === "white" ? "black" : "white");
     };
 
@@ -126,18 +133,35 @@ export default function MultiplayerPlay() {
     const isInitiator = playerColor === "white";
 
     console.log(
-      `Initializing WebRTC. Game: ${gameId}, User: ${user.username}, Initiator: ${isInitiator}`,
+      `Initializing WebRTC. Game: ${gameId}, User: ${user.username}, Initiator: ${isInitiator}, Reconnecting: ${isReconnecting}`,
     );
+
+    // Set reconnecting state if we're restoring a game
+    if (isReconnecting) {
+      dispatch(setReconnecting());
+      setStatusText("Reconnecting to game...");
+    }
 
     rtc.init(gameId, user.username, isInitiator);
 
-    // Cleanup on unmount
+    // Cleanup on unmount - BUT DON'T cleanup if we're just navigating within the app
     return () => {
-      rtc.cleanup();
+      // Only cleanup if game is over or no active game
+      if (gameOver || !gameState.gameId) {
+        rtc.cleanup();
+        clearPersistedGame();
+      }
       setIsConnected(false);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [gameId, user, playerColor]);
+
+  // Persist game state when it changes
+  useEffect(() => {
+    if (gameState.gameId && !gameState.gameOver) {
+      persistGameState(gameState);
+    }
+  }, [gameState]);
 
   // -- 4. Timer Logic --
   useEffect(() => {
@@ -192,6 +216,9 @@ export default function MultiplayerPlay() {
   function handleGameEnd(reason, winner) {
     setGameOver(true);
     setRunning(false);
+
+    // Clear persisted game
+    clearPersistedGame();
 
     const result =
       winner === playerColor ? "win" : winner === null ? "draw" : "loss";

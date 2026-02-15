@@ -301,4 +301,11 @@ export class WebRTCManager {
     this.dataChannel = null;
     this.peerConnection = null;
   }
+
+  // Force reconnection - used when page is refreshed and game state is restored
+  forceReconnect() {
+    this.isReconnecting = false;
+    this.reconnectAttempts = 0;
+    this.attemptReconnect();
+  }
 }

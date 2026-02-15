@@ -70,4 +70,8 @@ export const {
   setReconnecting,
   setConnected,
 } = gameSlice.actions;
+
+// Selector to get the full game state for persistence
+export const selectGameState = (state) => state.game;
+
 export default gameSlice.reducer;
