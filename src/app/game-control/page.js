@@ -6,16 +6,38 @@ import { useRouter } from "next/navigation";
 import { useDispatch, useSelector } from "react-redux";
 import { selectCurrentUser } from "@/store/features/auth/authSlice";
 import { setGameStart, setSearching } from "@/store/features/game/gameSlice";
+import { hasActiveGame, getActiveGameUrl } from "@/lib/game-utils";
 
 export default function GameControlPage() {
   const router = useRouter();
   const dispatch = useDispatch();
   const user = useSelector(selectCurrentUser);
+  const gameState = useSelector((state) => state.game);
 
   const [gameFormat, setGameFormat] = useState("rapid"); // rapid, blitz, bullet
   const [isRated, setIsRated] = useState(false);
   const [isFinding, setIsFinding] = useState(false);
   const [statusMsg, setStatusMsg] = useState("");
+
+  // Check if there's an active game and redirect if so
+  useEffect(() => {
+    if (hasActiveGame(gameState)) {
+      const gameUrl = getActiveGameUrl(gameState);
+      router.push(gameUrl);
+    }
+  }, [gameState, router]);
+
+  // Show loading or redirect message if game is active
+  if (hasActiveGame(gameState)) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-zinc-950 text-white">
+        <div className="text-center">
+          <p className="text-xl mb-4">You have an active game!</p>
+          <p className="text-zinc-400">Redirecting to your game...</p>
+        </div>
+      </div>
+    );
+  }
 
   const formats = [
     { id: "rapid", label: "Rapid (10+0)" },

@@ -2,10 +2,19 @@
 "use client";
 
 import React, { useEffect, useRef, useState } from "react";
-import { useSelector } from "react-redux";
-import { useSearchParams } from "next/navigation";
+import { useDispatch, useSelector } from "react-redux";
+import { useSearchParams, useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { selectCurrentUser } from "@/store/features/auth/authSlice";
+import {
+  setGameStart,
+  setGameOver,
+  updateLastFen,
+  addMoveToHistory,
+  setReconnecting,
+  setConnected,
+  resetGame,
+} from "@/store/features/game/gameSlice";
 import { WebRTCManager } from "@/lib/web-rtc-helper";
 
 // Dynamic import for the Chessboard to avoid SSR issues
@@ -15,6 +24,9 @@ const RenderChessBoard = dynamic(() => import("@/app/components/chessboard"), {
 
 export default function MultiplayerPlay() {
   const searchParams = useSearchParams();
+  const dispatch = useDispatch();
+  const router = useRouter();
+  const gameState = useSelector((state) => state.game);
 
   // -- 1. Game Setup & Configuration --
   // Detect player color from query param: ?color=white or ?color=black
@@ -52,6 +64,10 @@ export default function MultiplayerPlay() {
   const [statusText, setStatusText] = useState("Initializing...");
   const [isConnected, setIsConnected] = useState(false);
 
+  // Game-over state
+  const [gameOver, setGameOver] = useState(false);
+  const [gameResult, setGameResult] = useState(null);
+
   // -- 3. WebRTC Initialization --
   useEffect(() => {
     // If we don't have a gameID or a user, we can't connect.
@@ -77,10 +93,33 @@ export default function MultiplayerPlay() {
       setStatusText("Opponent disconnected");
     };
 
+    rtc.onReconnecting = (attempt, maxAttempts) => {
+      dispatch(setReconnecting());
+      setStatusText(`Reconnecting... (${attempt}/${maxAttempts})`);
+    };
+
+    rtc.onReconnected = () => {
+      dispatch(setConnected());
+      setStatusText("Reconnected to opponent");
+    };
+
+    rtc.onReconnectFailed = () => {
+      setStatusText("Connection lost - game abandoned");
+      // Handle game abandonment
+      handleGameEnd("abandonment", playerColor === "white" ? "black" : "white");
+    };
+
     rtc.onMove = (moveData) => {
-      // Opponent made a move
       console.log("Received move via WebRTC:", moveData);
       handleRemoteMove(moveData);
+    };
+
+    rtc.onGameControl = (data) => {
+      if (data.action === "resign") {
+        handleOpponentResign();
+      } else if (data.action === "offer_draw") {
+        // Handle draw offer (future feature)
+      }
     };
 
     // Initialize connection
@@ -149,6 +188,61 @@ export default function MultiplayerPlay() {
     return `${mm}:${ss}`;
   }
 
+  // Handle game end
+  function handleGameEnd(reason, winner) {
+    setGameOver(true);
+    setRunning(false);
+
+    const result =
+      winner === playerColor ? "win" : winner === null ? "draw" : "loss";
+
+    setGameResult({ result, reason, winner });
+
+    dispatch(
+      setGameOver({
+        result,
+        resultReason: reason,
+      }),
+    );
+
+    // Set appropriate status text
+    if (reason === "checkmate") {
+      setStatusText(
+        `Checkmate! ${winner === playerColor ? "You win!" : "You lose!"}`,
+      );
+    } else if (reason === "resignation") {
+      setStatusText(
+        `${winner === playerColor ? "Opponent resigned" : "You resigned"} - ${winner === playerColor ? "You win!" : "You lose!"}`,
+      );
+    } else if (reason === "timeout") {
+      setStatusText(
+        `Time out! ${winner === playerColor ? "You win!" : "You lose!"}`,
+      );
+    } else if (reason === "abandonment") {
+      setStatusText("Game abandoned - connection lost");
+    } else if (reason === "stalemate" || reason === "draw") {
+      setStatusText("Draw!");
+    }
+  }
+
+  // Handle opponent resignation
+  function handleOpponentResign() {
+    handleGameEnd("resignation", playerColor);
+  }
+
+  // Handle game over callback from chessboard
+  function handleGameOver(gameState) {
+    if (gameOver) return;
+
+    if (gameState.isCheckmate) {
+      handleGameEnd("checkmate", gameState.winner);
+    } else if (gameState.isStalemate) {
+      handleGameEnd("stalemate", null);
+    } else if (gameState.isDraw) {
+      handleGameEnd(gameState.reason, null);
+    }
+  }
+
   // Handle a move received from the opponent via WebRTC
   function handleRemoteMove(moveData) {
     const moveStr =
@@ -175,6 +269,12 @@ export default function MultiplayerPlay() {
     setHalfMove((h) => h + 1);
     setTurn((t) => (t === "white" ? "black" : "white"));
     setStatusText(`Opponent played ${moveStr}`);
+
+    // Update Redux store
+    if (moveData.fen) {
+      dispatch(updateLastFen(moveData.fen));
+    }
+    dispatch(addMoveToHistory(moveData));
 
     // 3. Trigger the board update
     // We pass the raw moveData (containing 'from' and 'to') to the board
@@ -214,6 +314,10 @@ export default function MultiplayerPlay() {
       `${moveStr} — ${turn === "white" ? "Black" : "White"} to move`,
     );
 
+    // Update Redux store
+    dispatch(updateLastFen(moveData.fen));
+    dispatch(addMoveToHistory(moveData));
+
     // Send via WebRTC
     if (rtcRef.current) {
       rtcRef.current.sendMove(moveData);
@@ -235,8 +339,14 @@ export default function MultiplayerPlay() {
   }
 
   function handleResign() {
-    setStatusText(`${playerColor === turn ? "You" : "Opponent"} resigned`);
-    setRunning(false);
+    if (gameOver) return;
+
+    // Send resign message to opponent
+    if (rtcRef.current && rtcRef.current.dataChannel?.readyState === "open") {
+      rtcRef.current.sendGameControl("resign");
+    }
+
+    handleGameEnd("resignation", playerColor === "white" ? "black" : "white");
   }
 
   function handleUndo() {
@@ -343,11 +453,28 @@ export default function MultiplayerPlay() {
               </button>
               <button
                 onClick={handleResign}
-                className="ml-auto text-sm px-3 py-2 rounded bg-red-700/20 border border-red-700 text-red-300"
+                disabled={gameOver}
+                className={`ml-auto text-sm px-3 py-2 rounded border ${
+                  gameOver
+                    ? "bg-zinc-800/20 border-zinc-800 text-zinc-500 cursor-not-allowed"
+                    : "bg-red-700/20 border-red-700 text-red-300"
+                }`}
               >
                 Resign
               </button>
             </div>
+
+            {gameOver && (
+              <button
+                onClick={() => {
+                  dispatch(resetGame());
+                  router.push("/game-control");
+                }}
+                className="mt-4 w-full px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-500"
+              >
+                Find New Game
+              </button>
+            )}
           </div>
         </div>
 
@@ -380,6 +507,7 @@ export default function MultiplayerPlay() {
             <RenderChessBoard
               orientation={orientation}
               onMove={(m) => handleLocalMove(m)}
+              onGameOver={handleGameOver}
               nextmove={incomingMove}
               boardWidth={"100%"}
             />

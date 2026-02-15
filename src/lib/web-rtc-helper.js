@@ -6,10 +6,18 @@ export class WebRTCManager {
     this.onMove = null;
     this.onConnect = null;
     this.onDisconnect = null;
+    this.onGameControl = null; // Callback for game control messages (resign, draw offer, etc.)
     this.gameId = null;
     this.username = null;
     this.pollingInterval = null;
     this.isInitiator = false;
+    this.reconnectAttempts = 0;
+    this.maxReconnectAttempts = 5;
+    this.reconnectDelay = 2000; // Start with 2s, exponential backoff
+    this.isReconnecting = false;
+    this.onReconnecting = null; // Callback for UI updates
+    this.onReconnected = null; // Callback when reconnection succeeds
+    this.onReconnectFailed = null; // Callback when max attempts reached
   }
 
   // Initialize connection
@@ -45,11 +53,15 @@ export class WebRTCManager {
     // Connection state changes
     this.peerConnection.onconnectionstatechange = () => {
       if (this.peerConnection.connectionState === "connected") {
+        this.reconnectAttempts = 0; // Reset on successful connection
         if (this.onConnect) this.onConnect();
       } else if (
         this.peerConnection.connectionState === "disconnected" ||
         this.peerConnection.connectionState === "failed"
       ) {
+        if (!this.isReconnecting) {
+          this.attemptReconnect();
+        }
         if (this.onDisconnect) this.onDisconnect();
       }
     };
@@ -70,14 +82,68 @@ export class WebRTCManager {
     this.dataChannel = channel;
     this.dataChannel.onopen = () => {
       console.log("Data Channel Open");
+      if (this.isReconnecting) {
+        this.isReconnecting = false;
+        this.reconnectAttempts = 0;
+        if (this.onReconnected) this.onReconnected();
+      }
       if (this.onConnect) this.onConnect();
     };
     this.dataChannel.onmessage = (event) => {
       const data = JSON.parse(event.data);
       if (data.type === "move" && this.onMove) {
         this.onMove(data.payload);
+      } else if (data.type === "game_control" && this.onGameControl) {
+        this.onGameControl(data);
       }
     };
+  }
+
+  async attemptReconnect() {
+    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+      console.log("Max reconnect attempts reached");
+      this.isReconnecting = false;
+      if (this.onReconnectFailed) this.onReconnectFailed();
+      return;
+    }
+
+    this.isReconnecting = true;
+    this.reconnectAttempts++;
+    const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
+
+    console.log(
+      `Reconnect attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts} in ${delay}ms`,
+    );
+
+    if (this.onReconnecting)
+      this.onReconnecting(this.reconnectAttempts, this.maxReconnectAttempts);
+
+    await new Promise((r) => setTimeout(r, delay));
+
+    // Clean up old connection
+    if (this.dataChannel) {
+      this.dataChannel.close();
+      this.dataChannel = null;
+    }
+    if (this.peerConnection) {
+      this.peerConnection.close();
+      this.peerConnection = null;
+    }
+
+    // Re-initialize
+    try {
+      this.init(this.gameId, this.username, this.isInitiator);
+    } catch (err) {
+      console.error("Reconnect attempt failed:", err);
+      // Will trigger another attempt via onconnectionstatechange
+    }
+  }
+
+  isConnected() {
+    return (
+      this.peerConnection?.connectionState === "connected" &&
+      this.dataChannel?.readyState === "open"
+    );
   }
 
   async createOffer() {
@@ -218,9 +284,21 @@ export class WebRTCManager {
     }
   }
 
+  sendGameControl(action) {
+    if (this.dataChannel && this.dataChannel.readyState === "open") {
+      this.dataChannel.send(JSON.stringify({ type: "game_control", action }));
+    } else {
+      console.warn("Data channel not open");
+    }
+  }
+
   cleanup() {
+    this.isReconnecting = false;
+    this.reconnectAttempts = 0;
     if (this.pollingInterval) clearInterval(this.pollingInterval);
     if (this.dataChannel) this.dataChannel.close();
     if (this.peerConnection) this.peerConnection.close();
+    this.dataChannel = null;
+    this.peerConnection = null;
   }
 }

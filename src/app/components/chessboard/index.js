@@ -6,6 +6,61 @@ import React, { useEffect, useRef, useState } from "react";
 import { Chessboard } from "react-chessboard";
 import { Chess } from "chess.js";
 
+/**
+ * Helper function to check game state (checkmate, stalemate, draw)
+ * @param {Chess} chess - The chess.js instance
+ * @returns {Object|null} - Game state object or null if game continues
+ */
+function checkGameState(chess) {
+  if (chess.isCheckmate()) {
+    const winner = chess.turn() === "w" ? "black" : "white"; // The one who just moved wins
+    return {
+      isCheckmate: true,
+      isStalemate: false,
+      isDraw: false,
+      winner,
+      reason: "checkmate",
+    };
+  }
+  if (chess.isStalemate()) {
+    return {
+      isCheckmate: false,
+      isStalemate: true,
+      isDraw: true,
+      winner: null,
+      reason: "stalemate",
+    };
+  }
+  if (chess.isDraw()) {
+    return {
+      isCheckmate: false,
+      isStalemate: false,
+      isDraw: true,
+      winner: null,
+      reason: "draw",
+    };
+  }
+  if (chess.isThreefoldRepetition()) {
+    return {
+      isCheckmate: false,
+      isStalemate: false,
+      isDraw: true,
+      winner: null,
+      reason: "threefold_repetition",
+    };
+  }
+  if (chess.isInsufficientMaterial()) {
+    return {
+      isCheckmate: false,
+      isStalemate: false,
+      isDraw: true,
+      winner: null,
+      reason: "insufficient_material",
+    };
+  }
+  return null; // Game continues
+}
+
 export default function RenderChessBoard({
   onMove = () => {}, // optional callback for move when user make a valid move
   orientation = "white", // orientation of the board (white/black)
@@ -13,6 +68,7 @@ export default function RenderChessBoard({
   position = "start", // FEN string or "start"
   nextmove = null, // optional: { from, to, promotion }
   boardWidth = 560,
+  onGameOver = () => {}, // callback when game ends: (result) => void
 }) {
   // internal chess instance
   const chessRef = useRef(
@@ -86,12 +142,22 @@ export default function RenderChessBoard({
       // clear premove if it matches this move
       if (premove && premove.from === from && premove.to === to)
         setPremove(null);
+      // Check for game over state after opponent's move
+      const gameState = checkGameState(chessRef.current);
+      if (gameState) {
+        onGameOver(gameState);
+      }
     } else {
       // if not legal, maybe opponent sent SAN; try to load as move via chess.move
       try {
         chessRef.current.move(nextmove);
         setLastMove({ from: nextmove.from, to: nextmove.to });
         refreshFromChess();
+        // Check for game over state after opponent's move
+        const gameState = checkGameState(chessRef.current);
+        if (gameState) {
+          onGameOver(gameState);
+        }
       } catch (e) {}
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -135,6 +201,11 @@ export default function RenderChessBoard({
             san: result.san,
             fen: chessRef.current.fen(),
           });
+          // Check for game over state
+          const gameState = checkGameState(chessRef.current);
+          if (gameState) {
+            onGameOver(gameState);
+          }
         }
       } else {
         console.log("Illegal premove", premove);
@@ -193,6 +264,11 @@ export default function RenderChessBoard({
             san: mv.san,
             fen: chessRef.current.fen(),
           });
+          // Check for game over state
+          const gameState = checkGameState(chessRef.current);
+          if (gameState) {
+            onGameOver(gameState);
+          }
           return true;
         }
         return false;
@@ -220,6 +296,11 @@ export default function RenderChessBoard({
         san: mv.san,
         fen: chessRef.current.fen(),
       });
+      // Check for game over state
+      const gameState = checkGameState(chessRef.current);
+      if (gameState) {
+        onGameOver(gameState);
+      }
       return true;
     }
     return false;
@@ -273,6 +354,11 @@ export default function RenderChessBoard({
         san: mv.san,
         fen: chessRef.current.fen(),
       });
+      // Check for game over state
+      const gameState = checkGameState(chessRef.current);
+      if (gameState) {
+        onGameOver(gameState);
+      }
     }
     setPromotionModal({ open: false, from: null, to: null, color: "w" });
   }
@@ -303,6 +389,34 @@ export default function RenderChessBoard({
       backgroundImage:
         "repeating-linear-gradient(45deg, rgba(148,163,184,0.12) 0 6px, transparent 6px 12px)",
     };
+  }
+
+  // Highlight king square when in check
+  if (chessRef.current.isCheck()) {
+    const turnColor = chessRef.current.turn(); // 'w' or 'b'
+    const kingSquare = chessRef.current
+      .board()
+      .flat()
+      .find(
+        (piece) => piece && piece.type === "k" && piece.color === turnColor,
+      );
+    if (kingSquare) {
+      // Find the square of the king
+      const board = chessRef.current.board();
+      for (let row = 0; row < 8; row++) {
+        for (let col = 0; col < 8; col++) {
+          const piece = board[row][col];
+          if (piece && piece.type === "k" && piece.color === turnColor) {
+            const file = String.fromCharCode(97 + col); // 'a' to 'h'
+            const rank = 8 - row; // 1 to 8
+            const square = file + rank;
+            customSquareStyles[square] = {
+              backgroundColor: "rgba(239,68,68,0.5)", // Red background for check
+            };
+          }
+        }
+      }
+    }
   }
 
   return (

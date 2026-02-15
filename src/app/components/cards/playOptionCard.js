@@ -1,9 +1,35 @@
 // src/app/components/cards/playOptionCard.js
-import Image from "next/image";
+"use client";
 
-export default function PlayOptionCard({ title, description, image }) {
+import { useRouter } from "next/navigation";
+import { useSelector } from "react-redux";
+import Image from "next/image";
+import { hasActiveGame, getActiveGameUrl } from "@/lib/game-utils";
+
+export default function PlayOptionCard({ title, description, image, link }) {
+  const router = useRouter();
+  const gameState = useSelector((state) => state.game);
+
+  const handleClick = (e) => {
+    // Check if there's an active game
+    if (hasActiveGame(gameState)) {
+      e.preventDefault();
+      const gameUrl = getActiveGameUrl(gameState);
+      router.push(gameUrl);
+      return;
+    }
+
+    // If link is provided and no active game, navigate normally
+    if (link) {
+      router.push(link);
+    }
+  };
+
   return (
-    <div className="group relative flex items-center gap-6 rounded-2xl md:rounded-full border border-white/10 bg-white/5 px-6 py-4 backdrop-blur-md transition-all duration-300 hover:border-white/20 hover:bg-white/10 hover:shadow-2xl hover:shadow-blue-500/10">
+    <div
+      onClick={handleClick}
+      className="group relative flex items-center gap-6 rounded-2xl md:rounded-full border border-white/10 bg-white/5 px-6 py-4 backdrop-blur-md transition-all duration-300 hover:border-white/20 hover:bg-white/10 hover:shadow-2xl hover:shadow-blue-500/10 cursor-pointer"
+    >
       {/* decorative soft circle (like the original) */}
       <div className="absolute -right-6 -top-6 h-28 w-28 rounded-full bg-blue-500/10 blur-3xl transition-all duration-500 group-hover:bg-blue-500/20" />
 
